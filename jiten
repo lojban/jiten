@@ -1,0 +1,190 @@
+#!/usr/bin/perl -w
+#
+# jiten
+# Created: Sat Feb 13 11:12:46 1999 by jay.kominek@colorado.edu
+# Revised: Sun Jan 20 12:03:41 2002 by jay.kominek@colorado.edu
+# Copyright 1998 Jay F. Kominek (jay.kominek@colorado.edu)
+#
+# Consult the file 'LICENSE' for the complete terms under which
+# you may use this file
+#
+#####################################################################
+# Jiten - The Perl DICT Server
+#####################################################################
+
+use strict;
+
+use POSIX;
+use IO::Socket;
+use IO::Select;
+use Fcntl;
+use Tie::RefHash;
+
+POSIX::nice(20);
+
+use Dictionary;
+use Connection;
+
+$| = 1;
+
+my $port = 2628;
+my $backlog = 10;
+my $daemon = 0;
+my $conf = "jiten.conf";
+my $server;
+
+use Getopt::Std;
+my %opts;
+getopts('dhp:b:f:',\%opts) || &displayhelp;
+if(defined($opts{'p'})) { $port = $opts{'p'}; }
+if(defined($opts{'b'})) { $backlog = $opts{'b'}; }
+if(defined($opts{'d'})) { $daemon = 1; }
+if(defined($opts{'f'})) { $conf = $opts{'f'}; }
+if(defined($opts{'h'})) { &displayhelp; }
+
+if($daemon) {
+  exit if fork;
+  POSIX::setsid();
+}
+
+Dictionary::loadconfiguration($conf);
+
+$server = IO::Socket::INET->new(LocalPort => $port,
+				Listen    => $backlog,
+				Reuse     => 1);
+if(!defined($server)) {
+  print "Failed to open listening socket on port $port\n";
+  exit(-1);
+}
+
+my $select = IO::Select->new($server);
+
+tie my %connections, 'Tie::RefHash';
+tie my %ready,       'Tie::RefHash';
+tie my %close,       'Tie::RefHash';
+my %inbuffer  = ( );
+my %outbuffer = ( );
+
+$SIG{'INT'} = $SIG{'TERM'} = \&sighandler;
+
+for(;;) {
+  my $client;
+
+  foreach $client ($select->can_read(1)) {
+    if($client == $server) {
+      my($iaddr,$address,$port,$peer_host,$peer_ip);
+      $client = $server->accept;
+      $select->add($client);
+      &setnonblocking($client);
+      $connections{$client} = Connection->new($client,\%outbuffer);
+    } elsif(defined($connections{$client})) {
+      my($data,$got);
+      $got = $client->recv($data,POSIX::BUFSIZ,0);
+      unless(defined $got && length $data) {
+	  &finishclient($client);
+	  next;
+      }
+      $inbuffer{$client} .= $data;
+    } else {
+      # martian socket activity
+    }
+
+    if( $inbuffer{$client} )
+    {
+	my($theline, $therest);
+	while(($theline, $therest) = $inbuffer{$client} =~ m/([^\n]*)\n(.*)/s) {
+	    $inbuffer{$client} = $therest;
+	    $theline =~ s/\r$//;
+	    push(@{$ready{$client}},$theline);
+	}
+    }
+  }
+
+  foreach $client (keys %ready) {
+    my $line;
+    foreach $line (@{$ready{$client}}) {
+      chomp $line;
+      if(defined($connections{$client})) {
+	if($connections{$client}->handle($line)==-1) {
+	  $close{$client} = 1;
+	}
+      } else {
+	&finishclient($client);
+      }
+    }
+    delete($ready{$client});
+  }
+
+  foreach $client ($select->can_write(1)) {
+    next unless $outbuffer{$client};
+    my $sent = $client->send($outbuffer{$client},0);
+    if(!defined($sent)) { next; }
+    if(($sent==length($outbuffer{$client}))||
+       ($!   ==POSIX::EWOULDBLOCK)) {
+      substr($outbuffer{$client},0,$sent) = '';
+      if(!length($outbuffer{$client})) {
+	delete($outbuffer{$client});
+      }
+    } else {
+      &finishclient($client);
+    }
+  }
+
+  foreach $client (keys %connections) {
+    if((time()-$connections{$client}->lastactive)>900) {
+      &finishclient($client);
+    }
+  }
+
+  foreach $client (keys %close) {
+    &finishclient($client);
+  }
+}
+
+sub sighandler {
+  $select->remove($server);
+  foreach my $client (keys %connections) {
+    $connections{$client}->sendnumeric(421,
+	"Server shutting down at operator request");
+  }
+  foreach my $client ($select->can_write(1)) {
+    my $sent = $client->send($outbuffer{$client},0);
+    &finishclient($client);
+  }    
+  exit(0);
+}
+
+END {
+  if(defined($server)) {
+    close($server);
+  }
+}
+
+sub finishclient {
+  my $client = shift;
+  delete($connections{$client});
+  delete($outbuffer{$client});
+  delete($inbuffer{$client});
+  delete($ready{$client});
+  $select->remove($client);
+  close($client);
+}
+
+sub setnonblocking {
+  my $socket = shift;
+  my $flags = fcntl($socket, F_GETFL, 0) or
+    die "Can't get the flags on socket: $!\n";
+  fcntl($socket, F_SETFL, $flags|O_NONBLOCK) or
+    die "Can't set socket non-blocking: $!\n";
+}
+
+sub displayhelp {
+  print "Usage: jiten [OPTION]...
+     -p                           Set default listening port   [$port]
+     -b                           Set the max incoming backlog [$backlog]
+     -f                           Server configuration file    [$conf]
+     -d                           Fork and daemonize
+     -h                           Display command line option help
+";
+  exit(1);
+}

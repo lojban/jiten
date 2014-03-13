@@ -1,0 +1,6 @@
+dbhandler virtual addons/virtual.pl
+dbhandler jbovlaste addons/jbovlaste.pl
+strat regexp,exact,prefix,suffix,substring addons/defaultstrats.pl
+strat rafsi addons/lojbanstrats.pl
+db jbovlaste jbovlaste dbi:Pg:dbname=DBNAME;host=DBHOST,DBUSER,DBPASSWORD
+db en<->jbo virtual en->jbo,jbo->en

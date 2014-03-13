@@ -1,0 +1,95 @@
+                               _  _  _
+                              (_)(_)| |_  ___  _ _
+                              | || ||  _|/ -_)| ' \
+                             _/ ||_| \__|\___||_||_|
+                            |__/The Perl DICT Server
+                                         Version 0.6
+
+--- Introduction ---
+
+Jiten (Japanese for 'dictionary', I hope), implements the DICT
+protocol as specified in RFC 2229 by Rik Faith and Bret Martin. It
+features a convinent scheme for extending its functionality, both
+searching strategies and database support.
+
+--- Strategies and Databases ---
+
+ The default distribution provides 8 searching strategies and one useful
+database handler. These are:
+ * exact                                 -\
+ * prefix                                 |  None of these use external
+ * suffix                                 |- modules. They can be used by
+ * substring                              |  anyone with Perl.
+ * regular expression                    -/
+ * metaphone (Text::Metaphone)           -\
+ * soundex (Text::Soundex)                |- Included in the extended
+ * levenshtein distance (String::Approx) -/  strategies file.
+
+The database handler reads data in the format of Rik Faith's dictd,
+except it doesn't handle compressed data. (I'll probably fix that
+later by simply invoking dictzip in the next version. Slow, but, hey,
+whatever)
+
+--- Configuration File Format ---
+
+The configuration file is made up of individual lines, each of which
+contains a different directive, generally of the format:
+
+ * directive name path args
+
+ The directives are as follows:
+
+ dbhandler name path
+  Where name is the name of the module contained in the file pointed to by
+  path.
+
+ db name path type
+  name is the abbreviated name used by the server in listings, etc, the path
+  is the location of the data, dependant on the type of handler, which is
+  stored in type (and corresponds to a dbhandler name)
+
+ strat name1,name2,name3 path
+  name[1,2,3] are the names of the strategies contained in the file pointed
+  to by path.
+
+--- Code interface ---
+
+ --- Database handlers ---
+
+Handlers are Perl modules appropriate for being tie()'d to hashes.  It
+should not provide any means to change the contents of the
+data. (Though, they should never be used, anyways). It should also
+provide the methods 'name' and 'virtual'. The name returns a
+single-line, reasonably short descriptive name of the contents of the
+database. virtual should return true or false, depending on whether or
+not it is a function of other databases. FIRSTKEY and NEXTKEY need
+only return valid data for the key, the value will never be acquired
+in this fashion. (Feel free to return whatever is most convinent and
+uses the least CPU time)
+
+Their FETCH method should return a reference to a list of definitions.
+Each definition is a reference to an array containing three things,
+the database it is from, the name of the entry in that database, and
+the actual data.
+
+ --- Search Strategies ---
+
+Search Strategies are functions, whose names are of the format
+"strat_<strategyname>". They take a reference to a database to search,
+and a search string (whose format will probably depend on the
+strategy). The return value should be a list of values which are
+returned from the database when the data for matching words is
+fetched.
+
+* In both cases, I suggest you look at the example strategies and
+database handlers to see how things are done. I'm probably not
+explaining it very well.
+
+--- Other stuff; about the author ---
+
+The Jiten homepage is http://www.miranda.org/~jkominek/jiten/ it
+should always have the most uptodate version of Jiten (outside of
+whatever is contained in my internal CVS tree).
+
+-- Jay Kominek <jkominek-jiten@miranda.org>
+   Hail Eris!
