@@ -92,15 +92,15 @@ sub FETCH {
 	return \@tmp;
     }
     if($key =~ /^__/) { $key=~s/^__//; $search = 1; }
+    my $lowerkey = lc($key);
     if($this->{'tolojban'}) {
-	my $response;
-
+	my $response = [];
 	my $sth = $dbh->prepare("SELECT * FROM natlangwords nlw,
 		natlangwordbestguesses nlwbg, definitions d WHERE
 		nlw.wordid=nlwbg.natlangwordid AND
-		nlwbg.definitionid=d.definitionid AND nlw.word=? AND
+		nlwbg.definitionid=d.definitionid AND lower(nlw.word)=? AND
 		nlw.langid=?");
-	$sth->execute($key, $this->{'natlang'}->[0]);
+	$sth->execute($lowerkey, $this->{'natlang'}->[0]);
 	while(defined(my $row = $sth->fetchrow_hashref)) {
 	    push @{$response}, [ $this->{'name'}, $key, &formatToLojban($row) ];
 	}
@@ -109,8 +109,8 @@ sub FETCH {
 	my $result = $dbh->selectrow_hashref("SELECT * FROM valsi v,
 		valsibestguesses vbg, definitions d, valsitypes vt WHERE
 		v.valsiid=vbg.valsiid AND vbg.definitionid=d.definitionid
-		AND vbg.langid=? AND v.word=? AND v.typeid=vt.typeid", undef,
-		$this->{'natlang'}->[0], $key);
+		AND vbg.langid=? AND lower(v.word)=? AND v.typeid=vt.typeid", undef,
+		$this->{'natlang'}->[0], $lowerkey);
 	if(defined($result)) {
 	    return [[ $this->{'name'}, $key, &formatFromLojban($result) ]];
 	} else {
@@ -121,7 +121,7 @@ sub FETCH {
 
 sub formatToLojban {
     my $row = shift;
-    my @strs;
+    my @strs = ("", "", "");
     my $str;
 
     my $meaning; my $place; my $selmaho; my $word; my $valsi;
@@ -169,7 +169,7 @@ SWITCH: {
 
 sub formatFromLojban {
     my $row = shift;
-    my @strs;
+    my @strs = ("", "", "", "", "", "", "");
     my $str;
     my( $definition, $meaning, $rafsi, $places, $selmaho, $notes, $word, $glossword, $valsi );
 
@@ -324,16 +324,14 @@ sub CLEAR {
 
 sub refreshdata {
     my $this = shift;
-    unless(time()-$this->{'lastrefreshed'}>(30*60)) {
+    my $lastrefreshed = $this->{'lastrefreshed'} || 0;
+    unless(time()-$lastrefreshed>(30*60)) {
 	return;
     }
     $this->{'data'} = { };
     if($this->{'tolojban'}) {
-	my $sth = $dbh->prepare("SELECT nlw.word FROM natlangwords nlw,
-		natlangwordbestguesses nlwbg, definitions d WHERE
-		nlw.wordid=nlwbg.natlangwordid AND
-		nlwbg.definitionid=d.definitionid AND
-		nlw.langid=?");
+	my $sth = $dbh->prepare("SELECT DISTINCT word FROM natlangwords
+		WHERE langid=?");
 	$sth->execute($this->{'natlang'}->[0]);
 	my $row;
 	while(defined($row=$sth->fetchrow_arrayref)) {
@@ -341,10 +339,9 @@ sub refreshdata {
 	}
 	$sth->finish;
     } else {
-	my $sth = $dbh->prepare("SELECT v.word FROM valsi v,
-		valsibestguesses vbg, definitions d WHERE
-		v.valsiid=vbg.valsiid AND vbg.definitionid=d.definitionid
-		AND vbg.langid=?");
+	my $sth = $dbh->prepare("SELECT DISTINCT v.word FROM valsi v
+		JOIN valsibestguesses vbg ON vbg.valsiid = v.valsiid
+		WHERE vbg.langid=?");
 	$sth->execute($this->{'natlang'}->[0]);
 	my $row;
 	while(defined($row=$sth->fetchrow_arrayref)) {

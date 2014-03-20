@@ -74,6 +74,7 @@ for(;;) {
     if($client == $server) {
       my($iaddr,$address,$port,$peer_host,$peer_ip);
       $client = $server->accept;
+      binmode($client, ":utf8");
       $select->add($client);
       &setnonblocking($client);
       $connections{$client} = Connection->new($client,\%outbuffer);

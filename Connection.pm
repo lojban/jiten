@@ -48,6 +48,8 @@ sub new {
 
   $this->{'msgid'} = sprintf("<%i.%i\@%s>",$$,time,hostname);
 
+  $this->{'mime'} = 0;
+
   bless($this, $class);
   $this->sendnumeric(220,sprintf("%s jiten %1.1f <%s> %s",
 				 hostname,

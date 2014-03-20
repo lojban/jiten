@@ -62,11 +62,7 @@ sub FETCH {
       push @response, @{$data};
     }
   }
-  if($#response>=0) {
-    return \@response;
-  } else {
-    return undef;
-  }
+  return \@response;
 }
 
 sub STORE {

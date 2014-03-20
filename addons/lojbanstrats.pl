@@ -1,16 +1,23 @@
 use strict;
 
+use File::Basename qw[ dirname ];
+
 use Dictionary;
+
 
 Dictionary::addstrategydesc('rafsi' => "Search by rafsi");
 
 my %rafsi;
-my $lojbandatadir = "/srv/jiten/lojban";
-open(RAFSIDATA,sprintf("%s/rafsi",$lojbandatadir));
+my $lojbandatadir = dirname(__FILE__) . '/../lojban';
+my $rafsipath = sprintf("%s/rafsi",$lojbandatadir);
+die qq{Can't read rafsi file '$rafsipath'} unless -r $rafsipath;
+
+open(RAFSIDATA, $rafsipath);
+binmode(RAFSIDATA, ":utf8");
 while(<RAFSIDATA>) {
     if(/^(\S+)\s+(\S+)\s+(.+)$/)
     {
-	$rafsi{$1} = $2;
+	$rafsi{lc($1)} = lc($2);
     }
 }
 close(RAFSIDATA);
@@ -18,9 +25,13 @@ close(RAFSIDATA);
 sub strat_rafsi {
     my($dbref,$search) = @_;
     my @matching;
-    if(defined($dbref->{ $rafsi{$search} }))
+    my $gismu = $rafsi{lc($search)};
+    if (defined($gismu))
     {
-	push @matching, @{ $dbref->{'__'.$rafsi{$search}} };
+        if(exists($dbref->{ $gismu }))
+        {
+            push @matching, @{ $dbref->{'__'.$gismu} };
+        }
     }
     return @matching;
 }
