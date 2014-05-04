@@ -89,7 +89,7 @@ sub handle_define {
   my $this = shift;
   my $line = shift;
   my($command,$database,$word) = &tokenize($line);
-  if(Dictionary::havedatabase($database)) {
+  if(Dictionary::havedatabase($database) || $database eq "!") {
     my @results = Dictionary::define($database,$word);
     if(scalar @results>0) {
       my %dbs     = Dictionary::databases();
@@ -103,7 +103,8 @@ sub handle_define {
       $this->sendnumeric(552,"no match");
     }
   } else {
-    $this->sendnumeric(501,"Syntax error, illegal parameters");
+    $this->sendnumeric(550,
+      "Invalid database, use \"SHOW DB\" for list of databases");
   }
   $this->{'define'}++;
 }
@@ -114,19 +115,24 @@ sub handle_match {
   my $line = shift;
   my($command,$database,$strategy,$word) = &tokenize($line);
 
-  if((Dictionary::havedatabase($database) || $database eq "!") &&
-     (Dictionary::havestrat($strategy)) || $strategy eq ".") {
-    my @results = Dictionary::match($database,$strategy,$word);
-    if(scalar @results>0) {
-      $this->sendnumericmultiline(152,($#results+1)." matches found",
-				  map { sprintf("%s \"%s\"",@{$_}) }
-				  @results);
-      $this->sendnumeric(250,"ok");
+  if(Dictionary::havedatabase($database) || $database eq "!") {
+    if(Dictionary::havestrat($strategy) || $strategy eq ".") {
+      my @results = Dictionary::match($database,$strategy,$word);
+      if(scalar @results>0) {
+        $this->sendnumericmultiline(152,($#results+1)." matches found",
+            map { sprintf("%s \"%s\"",@{$_}) }
+            @results);
+        $this->sendnumeric(250,"ok");
+      } else {
+        $this->sendnumeric(552,"no match");
+      }
     } else {
-      $this->sendnumeric(552,"no match");
+      $this->sendnumeric(551,
+        "Invalid strategy, use \"SHOW STRAT\" for a list of strategies");
     }
   } else {
-    $this->sendnumeric(501,"Syntax error, illegal parameters");
+    $this->sendnumeric(550,
+      "Invalid database, use \"SHOW DB\" for list of databases");
   }
   $this->{'match'}++;
 }
