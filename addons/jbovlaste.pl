@@ -22,6 +22,7 @@ sub fixdbh {
     return unless (time-$lastdbhtime)>10;
     if(!defined($dbh) || !$dbh->ping) {
 	$dbh = DBI->connect(@dbharguments);
+	$dbh->{pg_enable_utf8} = 1;
 	$lastdbhtime = time;
     }
 }
