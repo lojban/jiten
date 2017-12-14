@@ -14,6 +14,8 @@
 
 use strict;
 
+use lib '/srv/jiten';
+
 use POSIX;
 use IO::Socket;
 use IO::Select;
@@ -106,7 +108,13 @@ for(;;) {
     foreach $line (@{$ready{$client}}) {
       chomp $line;
       if(defined($connections{$client})) {
-	if($connections{$client}->handle($line)==-1) {
+        # For a while I had it like:
+        #
+        # if( $connections{$client}->handle($line) !~ m/^250 ok/ ) {
+        #
+        # Which doesn't appear to actually *work*; not sure what was
+        # up with that.
+	if( $connections{$client}->handle($line) == -1 ) {
 	  $close{$client} = 1;
 	}
       } else {
