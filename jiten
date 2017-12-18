@@ -21,6 +21,9 @@ use IO::Socket;
 use IO::Select;
 use Fcntl;
 use Tie::RefHash;
+use Data::Dumper;
+use Scalar::Util qw(looks_like_number);
+use Encode;
 
 POSIX::nice(20);
 
@@ -76,7 +79,7 @@ for(;;) {
     if($client == $server) {
       my($iaddr,$address,$port,$peer_host,$peer_ip);
       $client = $server->accept;
-      binmode($client, ":utf8");
+      binmode($client, ":raw");
       $select->add($client);
       &setnonblocking($client);
       $connections{$client} = Connection->new($client,\%outbuffer);
@@ -87,7 +90,7 @@ for(;;) {
 	  &finishclient($client);
 	  next;
       }
-      $inbuffer{$client} .= $data;
+      $inbuffer{$client} .= decode('UTF-8',$data);
     } else {
       # martian socket activity
     }
@@ -108,13 +111,12 @@ for(;;) {
     foreach $line (@{$ready{$client}}) {
       chomp $line;
       if(defined($connections{$client})) {
-        # For a while I had it like:
-        #
-        # if( $connections{$client}->handle($line) !~ m/^250 ok/ ) {
-        #
-        # Which doesn't appear to actually *work*; not sure what was
-        # up with that.
-	if( $connections{$client}->handle($line) == -1 ) {
+        my $handle_line = $connections{$client}->handle($line);
+        # Sometimes $handle_line looks like "250 ok\r\n", sometimes
+        # 0, and sometimes -1
+        if( $handle_line =~ m/^250 ok/ || (looks_like_number($handle_line) && $handle_line == 0) ) {
+          # That's fine
+        } else {
 	  $close{$client} = 1;
 	}
       } else {
@@ -126,7 +128,7 @@ for(;;) {
 
   foreach $client ($select->can_write(1)) {
     next unless $outbuffer{$client};
-    my $sent = $client->send($outbuffer{$client},0);
+    my $sent = $client->send(encode('UTF-8', $outbuffer{$client}),0);
     if(!defined($sent)) { next; }
     if(($sent==length($outbuffer{$client}))||
        ($!   ==POSIX::EWOULDBLOCK)) {
@@ -157,7 +159,7 @@ sub sighandler {
 	"Server shutting down at operator request");
   }
   foreach my $client ($select->can_write(1)) {
-    my $sent = $client->send($outbuffer{$client},0);
+    my $sent = $client->send(encode('UTF-8',$outbuffer{$client}),0);
     &finishclient($client);
   }    
   exit(0);
